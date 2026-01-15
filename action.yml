@@ -1,0 +1,53 @@
+name: 'Branch Narrator'
+description: 'Run branch-narrator on pull requests to produce risk reports and findings'
+author: 'Better Vibe'
+
+branding:
+  icon: 'git-pull-request'
+  color: 'blue'
+
+inputs:
+  branch-narrator-version:
+    description: 'The version of branch-narrator to run via npx'
+    required: true
+  profile:
+    description: 'Profile to use (auto|sveltekit|react|stencil|next|vue|astro|library)'
+    required: false
+    default: 'auto'
+  redact:
+    description: 'Redact obvious secret values in evidence excerpts'
+    required: false
+    default: 'true'
+  comment:
+    description: 'Whether to post a PR comment with results'
+    required: false
+    default: 'true'
+  fail-on-score:
+    description: 'Fail the workflow if risk score >= this threshold (0-100)'
+    required: false
+  max-flags:
+    description: 'Maximum number of flags to display in summary/comment'
+    required: false
+    default: '5'
+  artifact-name:
+    description: 'Base name for uploaded artifacts'
+    required: false
+    default: 'branch-narrator'
+
+outputs:
+  risk-score:
+    description: 'Risk score from 0-100'
+  risk-level:
+    description: 'Risk level (low|moderate|elevated|high|critical)'
+  flag-count:
+    description: 'Total number of risk flags detected'
+  has-blocking:
+    description: 'Whether any blocking actions were identified (true|false)'
+  facts-artifact-name:
+    description: 'Name of the uploaded facts artifact'
+  risk-artifact-name:
+    description: 'Name of the uploaded risk report artifact'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'

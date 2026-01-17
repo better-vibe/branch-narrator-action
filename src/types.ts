@@ -231,6 +231,8 @@ export interface ActionInputs {
   failOnScore?: number;
   maxFlags: number;
   artifactName: string;
+  baseSha?: string;
+  headSha?: string;
 }
 
 export interface ActionOutputs {

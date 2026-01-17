@@ -33,6 +33,12 @@ inputs:
     description: 'Base name for uploaded artifacts'
     required: false
     default: 'branch-narrator'
+  base-sha:
+    description: 'Base commit SHA for non-pull_request runs (requires head-sha)'
+    required: false
+  head-sha:
+    description: 'Head commit SHA for non-pull_request runs (requires base-sha)'
+    required: false
 
 outputs:
   risk-score:

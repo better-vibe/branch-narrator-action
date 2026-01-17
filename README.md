@@ -35,6 +35,55 @@ jobs:
           fail-on-score: "70"
 ```
 
+## Manual runs (workflow_dispatch)
+
+For manual tests or non-PR events, provide explicit `base-sha` and `head-sha` and
+disable PR comments:
+
+```yaml
+name: Branch Narrator (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      base-sha:
+        description: "Optional base SHA"
+        required: false
+      head-sha:
+        description: "Optional head SHA"
+        required: false
+
+jobs:
+  narrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve range
+        id: range
+        run: |
+          BASE_INPUT="${{ inputs['base-sha'] }}"
+          HEAD_INPUT="${{ inputs['head-sha'] }}"
+          if [ -n "$BASE_INPUT" ] && [ -n "$HEAD_INPUT" ]; then
+            BASE="$BASE_INPUT"
+            HEAD="$HEAD_INPUT"
+          else
+            HEAD="$(git rev-parse HEAD)"
+            BASE="$(git rev-parse HEAD^ 2>/dev/null || echo "$HEAD")"
+          fi
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          echo "head=$HEAD" >> "$GITHUB_OUTPUT"
+
+      - uses: better-vibe/branch-narrator-action@v1
+        with:
+          branch-narrator-version: "1.7.0"
+          comment: "false"
+          base-sha: ${{ steps.range.outputs.base }}
+          head-sha: ${{ steps.range.outputs.head }}
+```
+
 ## Inputs
 
 | Input | Description | Required | Default |
@@ -46,6 +95,8 @@ jobs:
 | `fail-on-score` | Fail workflow if risk score >= threshold (0-100) | No | - |
 | `max-flags` | Maximum flags to display in summary/comment | No | `5` |
 | `artifact-name` | Base name for uploaded artifacts | No | `branch-narrator` |
+| `base-sha` | Base commit SHA for non-pull_request runs (requires `head-sha`) | No | - |
+| `head-sha` | Head commit SHA for non-pull_request runs (requires `base-sha`) | No | - |
 
 ## Outputs
 

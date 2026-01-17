@@ -27,6 +27,8 @@ function getInputs(): ActionInputs {
   const failOnScoreInput = core.getInput("fail-on-score");
   const maxFlags = parseInt(core.getInput("max-flags") || "5", 10);
   const artifactName = core.getInput("artifact-name") || "branch-narrator";
+  const baseSha = core.getInput("base-sha");
+  const headSha = core.getInput("head-sha");
 
   let failOnScore: number | undefined;
   if (failOnScoreInput) {
@@ -46,6 +48,8 @@ function getInputs(): ActionInputs {
     failOnScore,
     maxFlags,
     artifactName,
+    baseSha,
+    headSha,
   };
 }
 
@@ -71,27 +75,45 @@ async function run(): Promise<void> {
     core.info(`Branch Narrator Action v1.0.0`);
     core.info(`Using branch-narrator@${inputs.branchNarratorVersion}`);
 
-    // Get PR context
+    // Get PR context or fall back to explicit inputs
     const prContext = getPRContext();
-    if (!prContext) {
-      throw new Error(
-        "Could not determine PR context. This action must run on pull_request events."
+    const hasManualRange = Boolean(inputs.baseSha || inputs.headSha);
+
+    if (prContext && hasManualRange) {
+      core.info(
+        "Ignoring base-sha/head-sha inputs because pull_request context is available."
       );
     }
 
-    core.info(`Analyzing PR #${prContext.prNumber}`);
-    core.info(`Base: ${prContext.baseSha.substring(0, 7)}`);
-    core.info(`Head: ${prContext.headSha.substring(0, 7)}`);
-
-    if (prContext.isFork) {
-      core.info("PR is from a fork");
+    if (!prContext) {
+      if (!inputs.baseSha || !inputs.headSha) {
+        throw new Error(
+          "Could not determine PR context. For non-pull_request events, provide base-sha and head-sha inputs."
+        );
+      }
+      core.info("No PR context detected; using base/head from inputs");
     }
+
+    const baseSha = prContext ? prContext.baseSha : inputs.baseSha!;
+    const headSha = prContext ? prContext.headSha : inputs.headSha!;
+
+    if (prContext) {
+      core.info(`Analyzing PR #${prContext.prNumber}`);
+      if (prContext.isFork) {
+        core.info("PR is from a fork");
+      }
+    } else {
+      core.info("Analyzing explicit commit range");
+    }
+
+    core.info(`Base: ${baseSha.substring(0, 7)}`);
+    core.info(`Head: ${headSha.substring(0, 7)}`);
 
     // Run branch-narrator
     const { facts, riskReport } = await runBranchNarrator({
       version: inputs.branchNarratorVersion,
-      baseSha: prContext.baseSha,
-      headSha: prContext.headSha,
+      baseSha,
+      headSha,
       profile: inputs.profile,
       redact: inputs.redact,
     });
@@ -113,7 +135,7 @@ async function run(): Promise<void> {
     await writeStepSummary(summaryMarkdown);
 
     // Post PR comment if enabled and not a fork
-    if (shouldPostComment(prContext.isFork, inputs.comment)) {
+    if (prContext && shouldPostComment(prContext.isFork, inputs.comment)) {
       const token = process.env.GITHUB_TOKEN;
       if (!token) {
         core.warning("GITHUB_TOKEN not available, skipping PR comment");
@@ -133,6 +155,8 @@ async function run(): Promise<void> {
           body: commentBody,
         });
       }
+    } else if (!prContext) {
+      core.info("Skipping PR comment because this is not a pull_request event");
     }
 
     // Compute blocking status

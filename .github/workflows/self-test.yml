@@ -1,0 +1,47 @@
+name: Self Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      base-sha:
+        description: "Optional base SHA (defaults to HEAD^)"
+        required: false
+      head-sha:
+        description: "Optional head SHA (defaults to HEAD)"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  self-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve range
+        id: range
+        run: |
+          BASE_INPUT="${{ inputs['base-sha'] }}"
+          HEAD_INPUT="${{ inputs['head-sha'] }}"
+          if [ -n "$BASE_INPUT" ] && [ -n "$HEAD_INPUT" ]; then
+            BASE="$BASE_INPUT"
+            HEAD="$HEAD_INPUT"
+          else
+            HEAD="$(git rev-parse HEAD)"
+            BASE="$(git rev-parse HEAD^ 2>/dev/null || echo "$HEAD")"
+          fi
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          echo "head=$HEAD" >> "$GITHUB_OUTPUT"
+          echo "Using base=$BASE head=$HEAD"
+
+      - name: Run branch-narrator action
+        uses: ./
+        with:
+          branch-narrator-version: "1.7.0"
+          profile: "auto"
+          comment: "false"
+          base-sha: ${{ steps.range.outputs.base }}
+          head-sha: ${{ steps.range.outputs.head }}

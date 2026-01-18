@@ -40,7 +40,7 @@ jobs:
       - name: Run branch-narrator action
         uses: ./
         with:
-          branch-narrator-version: "1.7.0"
+          branch-narrator-version: "latest"
           profile: "auto"
           comment: "false"
           base-sha: ${{ steps.range.outputs.base }}

@@ -28,7 +28,7 @@ jobs:
 
       - uses: better-vibe/branch-narrator-action@v1
         with:
-          branch-narrator-version: "1.7.0"
+          branch-narrator-version: "latest"
           profile: "auto"
           redact: "true"
           comment: "true"
@@ -78,7 +78,7 @@ jobs:
 
       - uses: better-vibe/branch-narrator-action@v1
         with:
-          branch-narrator-version: "1.7.0"
+          branch-narrator-version: "latest"
           comment: "false"
           base-sha: ${{ steps.range.outputs.base }}
           head-sha: ${{ steps.range.outputs.head }}
@@ -141,7 +141,7 @@ Use `fail-on-score` to fail the workflow if the risk score exceeds a threshold:
 ```yaml
 - uses: better-vibe/branch-narrator-action@v1
   with:
-    branch-narrator-version: "1.7.0"
+    branch-narrator-version: "latest"
     fail-on-score: "70"  # Fail if risk >= 70
 ```
 

@@ -5,7 +5,11 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import * as core from "@actions/core";
-import type { FactsOutput, RiskReport, RunResult } from "./types.js";
+import type {
+  FactsOutputWithDelta,
+  RiskReportWithDelta,
+  RunResult,
+} from "./types.js";
 
 const execAsync = promisify(exec);
 
@@ -15,6 +19,26 @@ export interface RunnerOptions {
   headSha: string;
   profile: string;
   redact: boolean;
+  // SARIF options
+  sarifUpload: boolean;
+  sarifFile: string;
+  // Delta mode options
+  baselinePath?: string;
+  sinceStrict: boolean;
+  // File filtering
+  exclude: string[];
+  include: string[];
+  // Category filtering (for risk-report)
+  riskOnlyCategories: string[];
+  riskExcludeCategories: string[];
+  // Size limits
+  maxFileBytes?: number;
+  maxDiffBytes?: number;
+  maxFindings?: number;
+  // Score explanation
+  explainScore: boolean;
+  // Evidence control
+  maxEvidenceLines: number;
 }
 
 /**
@@ -51,8 +75,21 @@ async function runCommand(command: string): Promise<string> {
 /**
  * Run branch-narrator facts command.
  */
-async function runFacts(options: RunnerOptions): Promise<FactsOutput> {
-  const { version, baseSha, headSha, profile, redact } = options;
+async function runFacts(options: RunnerOptions): Promise<FactsOutputWithDelta> {
+  const {
+    version,
+    baseSha,
+    headSha,
+    profile,
+    redact,
+    baselinePath,
+    sinceStrict,
+    exclude,
+    include,
+    maxFileBytes,
+    maxDiffBytes,
+    maxFindings,
+  } = options;
 
   const args = [
     `npx -y @better-vibe/branch-narrator@${version}`,
@@ -68,13 +105,40 @@ async function runFacts(options: RunnerOptions): Promise<FactsOutput> {
     args.push("--redact");
   }
 
+  // Delta mode
+  if (baselinePath) {
+    args.push(`--since "${baselinePath}"`);
+    if (sinceStrict) {
+      args.push("--since-strict");
+    }
+  }
+
+  // File filtering
+  for (const pattern of exclude) {
+    args.push(`--exclude "${pattern}"`);
+  }
+  for (const pattern of include) {
+    args.push(`--include "${pattern}"`);
+  }
+
+  // Size limits
+  if (maxFileBytes !== undefined) {
+    args.push(`--max-file-bytes ${maxFileBytes}`);
+  }
+  if (maxDiffBytes !== undefined) {
+    args.push(`--max-diff-bytes ${maxDiffBytes}`);
+  }
+  if (maxFindings !== undefined) {
+    args.push(`--max-findings ${maxFindings}`);
+  }
+
   const command = args.join(" ");
   core.info(`Running: branch-narrator facts`);
 
   const output = await runCommand(command);
 
   try {
-    return JSON.parse(output) as FactsOutput;
+    return JSON.parse(output) as FactsOutputWithDelta;
   } catch {
     core.error(`Failed to parse facts output as JSON`);
     core.debug(`Raw output: ${output.substring(0, 1000)}...`);
@@ -85,8 +149,19 @@ async function runFacts(options: RunnerOptions): Promise<FactsOutput> {
 /**
  * Run branch-narrator risk-report command.
  */
-async function runRiskReport(options: RunnerOptions): Promise<RiskReport> {
-  const { version, baseSha, headSha, redact } = options;
+async function runRiskReport(options: RunnerOptions): Promise<RiskReportWithDelta> {
+  const {
+    version,
+    baseSha,
+    headSha,
+    redact,
+    baselinePath,
+    sinceStrict,
+    riskOnlyCategories,
+    riskExcludeCategories,
+    explainScore,
+    maxEvidenceLines,
+  } = options;
   // Note: risk-report uses profile detection internally via changeSet
   // We don't pass --profile here as it's not a supported flag for risk-report
 
@@ -104,18 +179,107 @@ async function runRiskReport(options: RunnerOptions): Promise<RiskReport> {
     args.push("--redact");
   }
 
+  // Delta mode
+  if (baselinePath) {
+    // Use separate baseline for risk-report
+    const riskBaselinePath = baselinePath.replace("facts.json", "risk-report.json");
+    args.push(`--since "${riskBaselinePath}"`);
+    if (sinceStrict) {
+      args.push("--since-strict");
+    }
+  }
+
+  // Category filtering
+  if (riskOnlyCategories.length > 0) {
+    args.push(`--only ${riskOnlyCategories.join(",")}`);
+  }
+  if (riskExcludeCategories.length > 0) {
+    args.push(`--exclude ${riskExcludeCategories.join(",")}`);
+  }
+
+  // Score explanation
+  if (explainScore) {
+    args.push("--explain-score");
+  }
+
+  // Evidence control
+  if (maxEvidenceLines !== undefined) {
+    args.push(`--max-evidence-lines ${maxEvidenceLines}`);
+  }
+
   const command = args.join(" ");
   core.info("Running: branch-narrator risk-report");
 
   const output = await runCommand(command);
 
   try {
-    return JSON.parse(output) as RiskReport;
+    return JSON.parse(output) as RiskReportWithDelta;
   } catch {
     core.error("Failed to parse risk-report output as JSON");
     core.debug(`Raw output: ${output.substring(0, 1000)}...`);
     throw new Error("Failed to parse risk-report output as JSON");
   }
+}
+
+/**
+ * Run branch-narrator facts command with SARIF output.
+ */
+async function runFactsSarif(options: RunnerOptions): Promise<string> {
+  const {
+    version,
+    baseSha,
+    headSha,
+    profile,
+    redact,
+    sarifFile,
+    exclude,
+    include,
+    maxFileBytes,
+    maxDiffBytes,
+    maxFindings,
+  } = options;
+
+  const args = [
+    `npx -y @better-vibe/branch-narrator@${version}`,
+    "facts",
+    "--mode branch",
+    `--base ${baseSha}`,
+    `--head ${headSha}`,
+    `--profile ${profile}`,
+    "--format sarif",
+    `--out "${sarifFile}"`,
+    "--no-timestamp",
+  ];
+
+  if (redact) {
+    args.push("--redact");
+  }
+
+  // File filtering
+  for (const pattern of exclude) {
+    args.push(`--exclude "${pattern}"`);
+  }
+  for (const pattern of include) {
+    args.push(`--include "${pattern}"`);
+  }
+
+  // Size limits
+  if (maxFileBytes !== undefined) {
+    args.push(`--max-file-bytes ${maxFileBytes}`);
+  }
+  if (maxDiffBytes !== undefined) {
+    args.push(`--max-diff-bytes ${maxDiffBytes}`);
+  }
+  if (maxFindings !== undefined) {
+    args.push(`--max-findings ${maxFindings}`);
+  }
+
+  const command = args.join(" ");
+  core.info(`Running: branch-narrator facts --format sarif`);
+
+  await runCommand(command);
+
+  return sarifFile;
 }
 
 /**
@@ -125,16 +289,27 @@ export async function runBranchNarrator(options: RunnerOptions): Promise<RunResu
   core.startGroup("Running branch-narrator analysis");
 
   try {
-    // Run both commands in parallel for efficiency
-    const [facts, riskReport] = await Promise.all([
+    // Build list of commands to run in parallel
+    const promises: Promise<unknown>[] = [
       runFacts(options),
       runRiskReport(options),
-    ]);
+    ];
+
+    // Optionally run SARIF generation
+    if (options.sarifUpload) {
+      promises.push(runFactsSarif(options));
+    }
+
+    const results = await Promise.all(promises);
+
+    const facts = results[0] as Awaited<ReturnType<typeof runFacts>>;
+    const riskReport = results[1] as Awaited<ReturnType<typeof runRiskReport>>;
+    const sarifPath = options.sarifUpload ? (results[2] as string) : undefined;
 
     core.info(`Analysis complete: risk score ${riskReport.riskScore}, ${riskReport.flags.length} flags`);
     core.endGroup();
 
-    return { facts, riskReport };
+    return { facts, riskReport, sarifPath };
   } catch (error) {
     core.endGroup();
     throw error;

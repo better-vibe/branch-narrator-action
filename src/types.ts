@@ -233,6 +233,26 @@ export interface ActionInputs {
   artifactName: string;
   baseSha?: string;
   headSha?: string;
+  // SARIF options
+  sarifUpload: boolean;
+  sarifFile: string;
+  // Delta mode options
+  baselineArtifact?: string;
+  sinceStrict: boolean;
+  // File filtering
+  exclude: string[];
+  include: string[];
+  // Category filtering
+  riskOnlyCategories: string[];
+  riskExcludeCategories: string[];
+  // Size limits
+  maxFileBytes?: number;
+  maxDiffBytes?: number;
+  maxFindings?: number;
+  // Score explanation
+  explainScore: boolean;
+  // Evidence control
+  maxEvidenceLines: number;
 }
 
 export interface ActionOutputs {
@@ -242,9 +262,56 @@ export interface ActionOutputs {
   hasBlocking: boolean;
   factsArtifactName: string;
   riskArtifactName: string;
+  sarifArtifactName?: string;
+  deltaNewFindings?: number;
+  deltaResolvedFindings?: number;
+  scoreBreakdown?: string;
+}
+
+export interface DeltaInfo {
+  baseline: {
+    generatedAt?: string;
+    findingsCount: number;
+    range: {
+      base: string;
+      head: string;
+    };
+  };
+  current: {
+    findingsCount: number;
+  };
+  newFindings: string[];
+  resolvedFindings: string[];
+  unchangedFindings: string[];
+  scopeMatch: boolean;
+  scopeWarning?: string;
+}
+
+export interface FactsOutputWithDelta extends FactsOutput {
+  delta?: DeltaInfo;
+}
+
+export interface RiskReportWithDelta extends RiskReport {
+  delta?: {
+    baseline: {
+      generatedAt?: string;
+      riskScore: number;
+      flagsCount: number;
+    };
+    current: {
+      riskScore: number;
+      flagsCount: number;
+    };
+    newFlags: string[];
+    resolvedFlags: string[];
+    scoreDelta: number;
+    scopeMatch: boolean;
+    scopeWarning?: string;
+  };
 }
 
 export interface RunResult {
-  facts: FactsOutput;
-  riskReport: RiskReport;
+  facts: FactsOutputWithDelta;
+  riskReport: RiskReportWithDelta;
+  sarifPath?: string;
 }

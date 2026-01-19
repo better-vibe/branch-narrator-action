@@ -9,10 +9,25 @@ import {
   getPRContext,
   writeStepSummary,
   uploadArtifacts,
+  uploadSarif,
+  downloadBaselineArtifact,
+  cleanupTempArtifacts,
   createOrUpdateComment,
   shouldPostComment,
 } from "./github.js";
 import type { ActionInputs, ActionOutputs } from "./types.js";
+
+/**
+ * Parse a multiline or comma-separated string into an array.
+ */
+function parseStringList(input: string): string[] {
+  if (!input.trim()) return [];
+  // Split by newlines or commas, trim whitespace, filter empty
+  return input
+    .split(/[\n,]/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
 
 /**
  * Parse action inputs from the workflow.
@@ -29,6 +44,57 @@ function getInputs(): ActionInputs {
   const artifactName = core.getInput("artifact-name") || "branch-narrator";
   const baseSha = core.getInput("base-sha");
   const headSha = core.getInput("head-sha");
+
+  // SARIF options
+  const sarifUpload = core.getBooleanInput("sarif-upload");
+  const sarifFile = core.getInput("sarif-file") || "branch-narrator.sarif";
+
+  // Delta mode options
+  const baselineArtifact = core.getInput("baseline-artifact") || undefined;
+  const sinceStrict = core.getBooleanInput("since-strict");
+
+  // File filtering
+  const exclude = parseStringList(core.getInput("exclude"));
+  const include = parseStringList(core.getInput("include"));
+
+  // Category filtering
+  const riskOnlyCategories = parseStringList(core.getInput("risk-only-categories"));
+  const riskExcludeCategories = parseStringList(core.getInput("risk-exclude-categories"));
+
+  // Size limits
+  const maxFileBytesInput = core.getInput("max-file-bytes");
+  const maxDiffBytesInput = core.getInput("max-diff-bytes");
+  const maxFindingsInput = core.getInput("max-findings");
+
+  let maxFileBytes: number | undefined;
+  if (maxFileBytesInput) {
+    maxFileBytes = parseInt(maxFileBytesInput, 10);
+    if (isNaN(maxFileBytes) || maxFileBytes <= 0) {
+      throw new Error(`Invalid max-file-bytes: ${maxFileBytesInput}`);
+    }
+  }
+
+  let maxDiffBytes: number | undefined;
+  if (maxDiffBytesInput) {
+    maxDiffBytes = parseInt(maxDiffBytesInput, 10);
+    if (isNaN(maxDiffBytes) || maxDiffBytes <= 0) {
+      throw new Error(`Invalid max-diff-bytes: ${maxDiffBytesInput}`);
+    }
+  }
+
+  let maxFindings: number | undefined;
+  if (maxFindingsInput) {
+    maxFindings = parseInt(maxFindingsInput, 10);
+    if (isNaN(maxFindings) || maxFindings <= 0) {
+      throw new Error(`Invalid max-findings: ${maxFindingsInput}`);
+    }
+  }
+
+  // Score explanation
+  const explainScore = core.getBooleanInput("explain-score");
+
+  // Evidence control
+  const maxEvidenceLines = parseInt(core.getInput("max-evidence-lines") || "5", 10);
 
   let failOnScore: number | undefined;
   if (failOnScoreInput) {
@@ -50,6 +116,19 @@ function getInputs(): ActionInputs {
     artifactName,
     baseSha,
     headSha,
+    sarifUpload,
+    sarifFile,
+    baselineArtifact,
+    sinceStrict,
+    exclude,
+    include,
+    riskOnlyCategories,
+    riskExcludeCategories,
+    maxFileBytes,
+    maxDiffBytes,
+    maxFindings,
+    explainScore,
+    maxEvidenceLines,
   };
 }
 
@@ -63,6 +142,20 @@ function setOutputs(outputs: ActionOutputs): void {
   core.setOutput("has-blocking", outputs.hasBlocking.toString());
   core.setOutput("facts-artifact-name", outputs.factsArtifactName);
   core.setOutput("risk-artifact-name", outputs.riskArtifactName);
+
+  // Optional outputs
+  if (outputs.sarifArtifactName) {
+    core.setOutput("sarif-artifact-name", outputs.sarifArtifactName);
+  }
+  if (outputs.deltaNewFindings !== undefined) {
+    core.setOutput("delta-new-findings", outputs.deltaNewFindings.toString());
+  }
+  if (outputs.deltaResolvedFindings !== undefined) {
+    core.setOutput("delta-resolved-findings", outputs.deltaResolvedFindings.toString());
+  }
+  if (outputs.scoreBreakdown) {
+    core.setOutput("score-breakdown", outputs.scoreBreakdown);
+  }
 }
 
 /**
@@ -72,7 +165,7 @@ async function run(): Promise<void> {
   try {
     // Get inputs
     const inputs = getInputs();
-    core.info(`Branch Narrator Action v1.0.0`);
+    core.info(`Branch Narrator Action v1.1.0`);
     core.info(`Using branch-narrator@${inputs.branchNarratorVersion}`);
 
     // Get PR context or fall back to explicit inputs
@@ -109,13 +202,38 @@ async function run(): Promise<void> {
     core.info(`Base: ${baseSha.substring(0, 7)}`);
     core.info(`Head: ${headSha.substring(0, 7)}`);
 
+    // Download baseline artifacts if delta mode is enabled
+    let baselinePath: string | undefined;
+    if (inputs.baselineArtifact) {
+      const baselineResult = await downloadBaselineArtifact({
+        baselineArtifactName: inputs.baselineArtifact,
+      });
+      if (baselineResult) {
+        baselinePath = baselineResult.factsPath;
+        core.info(`Using baseline from: ${baselinePath}`);
+      }
+    }
+
     // Run branch-narrator
-    const { facts, riskReport } = await runBranchNarrator({
+    const { facts, riskReport, sarifPath } = await runBranchNarrator({
       version: inputs.branchNarratorVersion,
       baseSha,
       headSha,
       profile: inputs.profile,
       redact: inputs.redact,
+      sarifUpload: inputs.sarifUpload,
+      sarifFile: inputs.sarifFile,
+      baselinePath,
+      sinceStrict: inputs.sinceStrict,
+      exclude: inputs.exclude,
+      include: inputs.include,
+      riskOnlyCategories: inputs.riskOnlyCategories,
+      riskExcludeCategories: inputs.riskExcludeCategories,
+      maxFileBytes: inputs.maxFileBytes,
+      maxDiffBytes: inputs.maxDiffBytes,
+      maxFindings: inputs.maxFindings,
+      explainScore: inputs.explainScore,
+      maxEvidenceLines: inputs.maxEvidenceLines,
     });
 
     // Upload artifacts
@@ -124,6 +242,16 @@ async function run(): Promise<void> {
       riskReport,
       artifactName: inputs.artifactName,
     });
+
+    // Upload SARIF if enabled
+    let sarifArtifactName: string | undefined;
+    if (inputs.sarifUpload && sarifPath) {
+      const sarifResult = await uploadSarif({
+        sarifPath,
+        artifactName: inputs.artifactName,
+      });
+      sarifArtifactName = sarifResult.sarifArtifactName;
+    }
 
     // Render and write Step Summary
     const summaryMarkdown = renderStepSummary({
@@ -162,6 +290,23 @@ async function run(): Promise<void> {
     // Compute blocking status
     const hasBlocking = facts.actions.some((action) => action.blocking);
 
+    // Extract delta info if available
+    let deltaNewFindings: number | undefined;
+    let deltaResolvedFindings: number | undefined;
+    if (facts.delta) {
+      deltaNewFindings = facts.delta.newFindings.length;
+      deltaResolvedFindings = facts.delta.resolvedFindings.length;
+      core.info(
+        `Delta: ${deltaNewFindings} new findings, ${deltaResolvedFindings} resolved`
+      );
+    }
+
+    // Extract score breakdown if available
+    let scoreBreakdown: string | undefined;
+    if (inputs.explainScore && riskReport.scoreBreakdown) {
+      scoreBreakdown = JSON.stringify(riskReport.scoreBreakdown);
+    }
+
     // Set outputs
     const outputs: ActionOutputs = {
       riskScore: riskReport.riskScore,
@@ -170,6 +315,10 @@ async function run(): Promise<void> {
       hasBlocking,
       factsArtifactName,
       riskArtifactName,
+      sarifArtifactName,
+      deltaNewFindings,
+      deltaResolvedFindings,
+      scoreBreakdown,
     };
     setOutputs(outputs);
 
@@ -188,6 +337,9 @@ async function run(): Promise<void> {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     core.setFailed(errorMessage);
+  } finally {
+    // Clean up temporary files
+    await cleanupTempArtifacts();
   }
 }
 

@@ -7,7 +7,11 @@
   "scripts": {
     "build": "ncc build src/main.ts -o dist --source-map --license licenses.txt",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "changeset publish",
+    "release:tag": "node scripts/release-tag.js"
   },
   "keywords": [
     "github-action",
@@ -22,6 +26,7 @@
     "@actions/github": "^6.0.0"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.29.8",
     "@types/node": "^20.17.10",
     "@vercel/ncc": "^0.38.3",
     "typescript": "^5.7.2"

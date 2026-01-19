@@ -39,6 +39,57 @@ inputs:
   head-sha:
     description: 'Head commit SHA for non-pull_request runs (requires base-sha)'
     required: false
+  # SARIF output for GitHub Code Scanning
+  sarif-upload:
+    description: 'Enable SARIF generation and upload to GitHub Code Scanning'
+    required: false
+    default: 'false'
+  sarif-file:
+    description: 'Output path for SARIF file'
+    required: false
+    default: 'branch-narrator.sarif'
+  # Delta mode for baseline comparison
+  baseline-artifact:
+    description: 'Name of previous run facts artifact to download and compare against'
+    required: false
+  since-strict:
+    description: 'Exit with error on scope mismatch when using delta mode'
+    required: false
+    default: 'false'
+  # File filtering options
+  exclude:
+    description: 'Glob patterns to exclude files (newline or comma-separated)'
+    required: false
+  include:
+    description: 'Glob patterns to include only (newline or comma-separated)'
+    required: false
+  # Risk report category filtering
+  risk-only-categories:
+    description: 'Only include these risk categories (comma-separated: security,ci,deps,db,infra,api,tests,churn)'
+    required: false
+  risk-exclude-categories:
+    description: 'Exclude these risk categories (comma-separated: security,ci,deps,db,infra,api,tests,churn)'
+    required: false
+  # Size limits
+  max-file-bytes:
+    description: 'Maximum file size to analyze in bytes'
+    required: false
+  max-diff-bytes:
+    description: 'Maximum diff size to analyze in bytes'
+    required: false
+  max-findings:
+    description: 'Maximum number of findings to return'
+    required: false
+  # Score explanation
+  explain-score:
+    description: 'Include detailed score breakdown in output'
+    required: false
+    default: 'false'
+  # Evidence control
+  max-evidence-lines:
+    description: 'Maximum evidence lines per flag in risk report'
+    required: false
+    default: '5'
 
 outputs:
   risk-score:
@@ -53,6 +104,14 @@ outputs:
     description: 'Name of the uploaded facts artifact'
   risk-artifact-name:
     description: 'Name of the uploaded risk report artifact'
+  sarif-artifact-name:
+    description: 'Name of the uploaded SARIF artifact (if sarif-upload enabled)'
+  delta-new-findings:
+    description: 'Count of new findings since baseline (if baseline-artifact provided)'
+  delta-resolved-findings:
+    description: 'Count of resolved findings since baseline (if baseline-artifact provided)'
+  score-breakdown:
+    description: 'JSON string of the score breakdown (if explain-score enabled)'
 
 runs:
   using: 'node20'

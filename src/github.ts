@@ -11,6 +11,9 @@ import { DefaultArtifactClient } from "@actions/artifact";
 import type { FactsOutput, RiskReport } from "./types.js";
 import { getCommentMarker } from "./render.js";
 
+// Temporary directory for downloaded artifacts
+let tempArtifactDir: string | null = null;
+
 type Octokit = ReturnType<typeof github.getOctokit>;
 
 /**
@@ -87,6 +90,156 @@ export async function uploadArtifacts(
   core.endGroup();
 
   return { factsArtifactName, riskArtifactName };
+}
+
+export interface UploadSarifOptions {
+  sarifPath: string;
+  artifactName: string;
+}
+
+export interface UploadSarifResult {
+  sarifArtifactName: string;
+}
+
+/**
+ * Upload SARIF file as artifact and to GitHub Code Scanning.
+ */
+export async function uploadSarif(
+  options: UploadSarifOptions
+): Promise<UploadSarifResult> {
+  const { sarifPath, artifactName } = options;
+
+  core.startGroup("Uploading SARIF");
+
+  const sarifArtifactName = `${artifactName}-sarif`;
+
+  try {
+    // Check if file exists
+    await fs.access(sarifPath);
+
+    const artifactClient = new DefaultArtifactClient();
+
+    // Upload SARIF as artifact
+    core.info(`Uploading ${sarifArtifactName}...`);
+    await artifactClient.uploadArtifact(
+      sarifArtifactName,
+      [sarifPath],
+      path.dirname(sarifPath),
+      { compressionLevel: 6 }
+    );
+
+    // Note: Actual upload to GitHub Code Scanning requires the codeql-action
+    // which needs to be used separately. We just provide the SARIF file as artifact.
+    core.info(
+      "SARIF artifact uploaded. To upload to Code Scanning, use github/codeql-action/upload-sarif in a subsequent step."
+    );
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    core.warning(`Failed to upload SARIF: ${errorMessage}`);
+  }
+
+  core.endGroup();
+
+  return { sarifArtifactName };
+}
+
+export interface DownloadBaselineOptions {
+  baselineArtifactName: string;
+}
+
+export interface DownloadBaselineResult {
+  factsPath: string;
+  riskReportPath: string;
+}
+
+/**
+ * Download baseline artifacts from a previous run.
+ * This searches for artifacts from previous workflow runs.
+ */
+export async function downloadBaselineArtifact(
+  options: DownloadBaselineOptions
+): Promise<DownloadBaselineResult | null> {
+  const { baselineArtifactName } = options;
+
+  core.startGroup("Downloading baseline artifacts");
+
+  try {
+    const artifactClient = new DefaultArtifactClient();
+
+    // Create temp directory if not exists
+    if (!tempArtifactDir) {
+      tempArtifactDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), "branch-narrator-baseline-")
+      );
+    }
+
+    // Try to download the facts artifact
+    const factsArtifactName = `${baselineArtifactName}-facts`;
+    const riskArtifactName = `${baselineArtifactName}-risk-report`;
+
+    core.info(`Looking for baseline artifacts: ${factsArtifactName}, ${riskArtifactName}`);
+
+    // List available artifacts to find matching ones
+    const { artifacts } = await artifactClient.listArtifacts({
+      latest: true,
+    });
+
+    const factsArtifact = artifacts.find((a) => a.name === factsArtifactName);
+    const riskArtifact = artifacts.find((a) => a.name === riskArtifactName);
+
+    if (!factsArtifact || !riskArtifact) {
+      core.info(
+        `Baseline artifacts not found (facts: ${!!factsArtifact}, risk: ${!!riskArtifact}). Skipping delta mode.`
+      );
+      core.endGroup();
+      return null;
+    }
+
+    // Download facts artifact
+    const factsDownloadDir = path.join(tempArtifactDir, "facts");
+    await fs.mkdir(factsDownloadDir, { recursive: true });
+    await artifactClient.downloadArtifact(factsArtifact.id, {
+      path: factsDownloadDir,
+    });
+
+    // Download risk-report artifact
+    const riskDownloadDir = path.join(tempArtifactDir, "risk");
+    await fs.mkdir(riskDownloadDir, { recursive: true });
+    await artifactClient.downloadArtifact(riskArtifact.id, {
+      path: riskDownloadDir,
+    });
+
+    const factsPath = path.join(factsDownloadDir, "facts.json");
+    const riskReportPath = path.join(riskDownloadDir, "risk-report.json");
+
+    // Verify files exist
+    await fs.access(factsPath);
+    await fs.access(riskReportPath);
+
+    core.info("Baseline artifacts downloaded successfully");
+    core.endGroup();
+
+    return { factsPath, riskReportPath };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    core.warning(`Failed to download baseline artifacts: ${errorMessage}`);
+    core.endGroup();
+    return null;
+  }
+}
+
+/**
+ * Clean up temporary artifact directory.
+ */
+export async function cleanupTempArtifacts(): Promise<void> {
+  if (tempArtifactDir) {
+    try {
+      await fs.rm(tempArtifactDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+    tempArtifactDir = null;
+  }
 }
 
 export interface PRContext {

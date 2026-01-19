@@ -1,6 +1,6 @@
 {
   "name": "branch-narrator-action",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "GitHub Action that runs branch-narrator on pull requests to produce risk reports and findings",
   "main": "dist/index.js",
   "type": "module",

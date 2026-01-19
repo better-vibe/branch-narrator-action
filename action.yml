@@ -1,5 +1,5 @@
 name: 'Branch Narrator'
-description: 'Run branch-narrator on pull requests to produce risk reports and findings'
+description: 'Run branch-narrator on pull requests to generate summaries and risk flags tied to diff evidence. File paths, line numbers, and findings that AI and reviewers can verify.'
 author: 'Better Vibe'
 
 branding:

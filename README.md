@@ -28,7 +28,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: better-vibe/branch-narrator-action@v1
+      - uses: better-vibe/branch-narrator-action@v1.1.0
         with:
           branch-narrator-version: "latest"
           profile: "auto"
@@ -58,10 +58,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: better-vibe/branch-narrator-action@v1
+      - uses: better-vibe/branch-narrator-action@v1.1.0
         id: narrator
         with:
-          branch-narrator-version: "1.7.0"
+          branch-narrator-version: "latest"
           sarif-upload: "true"
           fail-on-score: "70"
           risk-only-categories: "security,db,deps"
@@ -117,7 +117,7 @@ jobs:
           echo "base=$BASE" >> "$GITHUB_OUTPUT"
           echo "head=$HEAD" >> "$GITHUB_OUTPUT"
 
-      - uses: better-vibe/branch-narrator-action@v1
+      - uses: better-vibe/branch-narrator-action@v1.1.0
         with:
           branch-narrator-version: "latest"
           comment: "false"
@@ -225,9 +225,9 @@ The action uploads JSON artifacts:
 Enable SARIF output to integrate with GitHub Code Scanning. Findings appear as annotations in the PR diff view.
 
 ```yaml
-- uses: better-vibe/branch-narrator-action@v1
+- uses: better-vibe/branch-narrator-action@v1.1.0
   with:
-    branch-narrator-version: "1.7.0"
+    branch-narrator-version: "latest"
     sarif-upload: "true"
 
 # Upload SARIF to GitHub Code Scanning
@@ -241,10 +241,10 @@ Enable SARIF output to integrate with GitHub Code Scanning. Findings appear as a
 Track changes between runs by comparing against a baseline artifact from a previous workflow run:
 
 ```yaml
-- uses: better-vibe/branch-narrator-action@v1
+- uses: better-vibe/branch-narrator-action@v1.1.0
   id: narrator
   with:
-    branch-narrator-version: "1.7.0"
+    branch-narrator-version: "latest"
     baseline-artifact: "branch-narrator"  # Name from previous run
 
 - name: Check for regressions
@@ -259,9 +259,9 @@ Track changes between runs by comparing against a baseline artifact from a previ
 Exclude or include specific files using glob patterns:
 
 ```yaml
-- uses: better-vibe/branch-narrator-action@v1
+- uses: better-vibe/branch-narrator-action@v1.1.0
   with:
-    branch-narrator-version: "1.7.0"
+    branch-narrator-version: "latest"
     exclude: |
       **/generated/**
       **/vendor/**
@@ -275,9 +275,9 @@ Exclude or include specific files using glob patterns:
 Focus analysis on specific risk categories:
 
 ```yaml
-- uses: better-vibe/branch-narrator-action@v1
+- uses: better-vibe/branch-narrator-action@v1.1.0
   with:
-    branch-narrator-version: "1.7.0"
+    branch-narrator-version: "latest"
     risk-only-categories: "security,db,deps"  # Only these categories
     # Or exclude specific categories:
     # risk-exclude-categories: "churn,tests"
@@ -290,7 +290,7 @@ Available categories: `security`, `ci`, `deps`, `db`, `infra`, `api`, `tests`, `
 Use `fail-on-score` to fail the workflow if the risk score exceeds a threshold:
 
 ```yaml
-- uses: better-vibe/branch-narrator-action@v1
+- uses: better-vibe/branch-narrator-action@v1.1.0
   with:
     branch-narrator-version: "latest"
     fail-on-score: "70"  # Fail if risk >= 70

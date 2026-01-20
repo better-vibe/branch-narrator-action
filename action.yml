@@ -29,6 +29,14 @@ inputs:
     description: 'Maximum number of flags to display in summary/comment'
     required: false
     default: '5'
+  show-findings:
+    description: 'Show detailed findings section in summary/comment'
+    required: false
+    default: 'true'
+  max-findings-display:
+    description: 'Maximum number of findings to display in summary/comment'
+    required: false
+    default: '10'
   artifact-name:
     description: 'Base name for uploaded artifacts'
     required: false
@@ -98,6 +106,8 @@ outputs:
     description: 'Risk level (low|moderate|elevated|high|critical)'
   flag-count:
     description: 'Total number of risk flags detected'
+  findings-count:
+    description: 'Total number of findings detected'
   has-blocking:
     description: 'Whether any blocking actions were identified (true|false)'
   facts-artifact-name:

@@ -253,12 +253,16 @@ export interface ActionInputs {
   explainScore: boolean;
   // Evidence control
   maxEvidenceLines: number;
+  // Findings display
+  showFindings: boolean;
+  maxFindingsDisplay: number;
 }
 
 export interface ActionOutputs {
   riskScore: number;
   riskLevel: RiskReportLevel;
   flagCount: number;
+  findingsCount: number;
   hasBlocking: boolean;
   factsArtifactName: string;
   riskArtifactName: string;
@@ -314,4 +318,29 @@ export interface RunResult {
   facts: FactsOutputWithDelta;
   riskReport: RiskReportWithDelta;
   sarifPath?: string;
+  resolvedVersion: string;
+}
+
+/**
+ * Context information for rendering PR comments and step summaries.
+ */
+export interface RenderContext {
+  /** Repository owner */
+  owner: string;
+  /** Repository name */
+  repo: string;
+  /** Head commit SHA for permalink generation */
+  headSha: string;
+  /** Resolved branch-narrator version */
+  resolvedVersion: string;
+  /** Base commit SHA */
+  baseSha: string;
+  /** Number of new findings (delta mode) */
+  deltaNewFindings?: number;
+  /** Number of resolved findings (delta mode) */
+  deltaResolvedFindings?: number;
+  /** Whether to show detailed findings section */
+  showFindings: boolean;
+  /** Maximum findings to display */
+  maxFindingsDisplay: number;
 }

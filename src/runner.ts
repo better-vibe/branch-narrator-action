@@ -13,6 +13,23 @@ import type {
 
 const execAsync = promisify(exec);
 
+/**
+ * Resolve the actual version of branch-narrator from npm registry.
+ * If the requested version is a tag (like "latest"), this returns the actual semver.
+ */
+async function resolveVersion(requestedVersion: string): Promise<string> {
+  try {
+    const { stdout } = await execAsync(
+      `npm view @better-vibe/branch-narrator@${requestedVersion} version`,
+      { timeout: 15000 }
+    );
+    return stdout.trim();
+  } catch (error) {
+    core.debug(`Failed to resolve version, using requested: ${error}`);
+    return requestedVersion;
+  }
+}
+
 export interface RunnerOptions {
   version: string;
   baseSha: string;
@@ -289,6 +306,16 @@ export async function runBranchNarrator(options: RunnerOptions): Promise<RunResu
   core.startGroup("Running branch-narrator analysis");
 
   try {
+    // Resolve actual version first
+    core.info(`Resolving branch-narrator version: ${options.version}`);
+    const resolvedVersion = await resolveVersion(options.version);
+
+    if (resolvedVersion !== options.version) {
+      core.info(`Resolved version: ${options.version} -> ${resolvedVersion}`);
+    } else {
+      core.info(`Using version: ${resolvedVersion}`);
+    }
+
     // Build list of commands to run in parallel
     const promises: Promise<unknown>[] = [
       runFacts(options),
@@ -309,7 +336,7 @@ export async function runBranchNarrator(options: RunnerOptions): Promise<RunResu
     core.info(`Analysis complete: risk score ${riskReport.riskScore}, ${riskReport.flags.length} flags`);
     core.endGroup();
 
-    return { facts, riskReport, sarifPath };
+    return { facts, riskReport, sarifPath, resolvedVersion };
   } catch (error) {
     core.endGroup();
     throw error;

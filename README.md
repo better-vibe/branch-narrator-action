@@ -28,7 +28,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: better-vibe/branch-narrator-action@v1.1.0
+      - uses: better-vibe/branch-narrator-action@v1.2.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           branch-narrator-version: "latest"
           profile: "auto"
@@ -36,6 +38,8 @@ jobs:
           comment: "true"
           fail-on-score: "70"
 ```
+
+> **Note:** The `GITHUB_TOKEN` environment variable is required for posting PR comments. It's automatically provided by GitHub Actions.
 
 ### Advanced Usage with SARIF
 
@@ -58,8 +62,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: better-vibe/branch-narrator-action@v1.1.0
+      - uses: better-vibe/branch-narrator-action@v1.2.0
         id: narrator
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           branch-narrator-version: "latest"
           sarif-upload: "true"
@@ -72,8 +78,11 @@ jobs:
         with:
           sarif_file: branch-narrator.sarif
 
-      - name: Show score breakdown
-        run: echo '${{ steps.narrator.outputs.score-breakdown }}'
+      - name: Show results
+        run: |
+          echo "Risk Score: ${{ steps.narrator.outputs.risk-score }}"
+          echo "Findings: ${{ steps.narrator.outputs.findings-count }}"
+          echo "Score Breakdown: ${{ steps.narrator.outputs.score-breakdown }}"
 ```
 
 ## Manual runs (workflow_dispatch)
@@ -117,7 +126,7 @@ jobs:
           echo "base=$BASE" >> "$GITHUB_OUTPUT"
           echo "head=$HEAD" >> "$GITHUB_OUTPUT"
 
-      - uses: better-vibe/branch-narrator-action@v1.1.0
+      - uses: better-vibe/branch-narrator-action@v1.2.0
         with:
           branch-narrator-version: "latest"
           comment: "false"
@@ -137,6 +146,8 @@ jobs:
 | `comment` | Whether to post a PR comment with results | No | `true` |
 | `fail-on-score` | Fail workflow if risk score >= threshold (0-100) | No | - |
 | `max-flags` | Maximum flags to display in summary/comment | No | `5` |
+| `show-findings` | Show detailed findings section in summary/comment | No | `true` |
+| `max-findings-display` | Maximum findings to display in summary/comment | No | `10` |
 | `artifact-name` | Base name for uploaded artifacts | No | `branch-narrator` |
 | `base-sha` | Base commit SHA for non-pull_request runs (requires `head-sha`) | No | - |
 | `head-sha` | Head commit SHA for non-pull_request runs (requires `base-sha`) | No | - |
@@ -186,6 +197,7 @@ jobs:
 | `risk-score` | Risk score from 0-100 |
 | `risk-level` | Risk level (low\|moderate\|elevated\|high\|critical) |
 | `flag-count` | Total number of risk flags detected |
+| `findings-count` | Total number of findings detected |
 | `has-blocking` | Whether any blocking actions were identified |
 | `facts-artifact-name` | Name of the uploaded facts artifact |
 | `risk-artifact-name` | Name of the uploaded risk report artifact |
@@ -198,20 +210,55 @@ jobs:
 
 ### Step Summary
 
-The action writes a concise summary to the GitHub Actions Job Summary including:
-- Risk score and level
-- Top N flags (rule key, severity, short message)
-- Key findings section
-- Link to artifacts
+The action writes a detailed summary to the GitHub Actions Job Summary including:
+- **Version and commit range** with clickable compare link
+- Risk score and level with visual badge
+- **Delta comparison** (new/resolved findings when using baseline mode)
+- Change statistics (files, insertions, deletions, flags, findings)
+- Key findings highlights
+- Top N risk flags with scores and evidence
+- **Detailed findings section** with category breakdown and file permalinks
+- Category scores with visual bars
+- Blocking actions (if any)
+- Artifact references
 
 ### PR Comment
 
 If permissions allow and PR is not from a fork, the action creates/updates a PR comment containing:
-- Risk score and level
-- Top N flags with evidence excerpts (redacted)
+- **Version info** (`branch-narrator@x.y.z`) and commit range link
+- Risk score and level badge
+- **Delta summary** (when using baseline comparison)
+- Quick stats (files changed, insertions/deletions)
+- Collapsible key findings
+- Risk flags with evidence and **GitHub file permalinks**
+- **Detailed findings section** (collapsible) with category breakdown
+- Blocking actions warning
 - Artifact references
 
 The comment uses a stable hidden marker (`<!-- branch-narrator:report -->`) to update existing comments instead of creating new ones.
+
+### Pipeline Logs
+
+The action outputs a structured summary to the workflow logs:
+```
+┌─────────────────────────────────────────┐
+│          Analysis Summary               │
+├─────────────────────────────────────────┤
+│ Version:     1.2.3                      │
+│ Risk Score:  45  /100 (moderate)        │
+│ Flags:       3                          │
+│ Findings:    12                         │
+│ Files:       8                          │
+│ Delta:       +2 new, -1 resolved        │
+└─────────────────────────────────────────┘
+
+Findings by category:
+  security: 5
+  db: 4
+  deps: 3
+```
+
+The resolved version is also displayed as a GitHub Actions notice for easy visibility.
 
 ### Artifacts
 
@@ -225,7 +272,9 @@ The action uploads JSON artifacts:
 Enable SARIF output to integrate with GitHub Code Scanning. Findings appear as annotations in the PR diff view.
 
 ```yaml
-- uses: better-vibe/branch-narrator-action@v1.1.0
+- uses: better-vibe/branch-narrator-action@v1.2.0
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   with:
     branch-narrator-version: "latest"
     sarif-upload: "true"
@@ -241,8 +290,10 @@ Enable SARIF output to integrate with GitHub Code Scanning. Findings appear as a
 Track changes between runs by comparing against a baseline artifact from a previous workflow run:
 
 ```yaml
-- uses: better-vibe/branch-narrator-action@v1.1.0
+- uses: better-vibe/branch-narrator-action@v1.2.0
   id: narrator
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   with:
     branch-narrator-version: "latest"
     baseline-artifact: "branch-narrator"  # Name from previous run
@@ -259,7 +310,9 @@ Track changes between runs by comparing against a baseline artifact from a previ
 Exclude or include specific files using glob patterns:
 
 ```yaml
-- uses: better-vibe/branch-narrator-action@v1.1.0
+- uses: better-vibe/branch-narrator-action@v1.2.0
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   with:
     branch-narrator-version: "latest"
     exclude: |
@@ -275,7 +328,9 @@ Exclude or include specific files using glob patterns:
 Focus analysis on specific risk categories:
 
 ```yaml
-- uses: better-vibe/branch-narrator-action@v1.1.0
+- uses: better-vibe/branch-narrator-action@v1.2.0
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   with:
     branch-narrator-version: "latest"
     risk-only-categories: "security,db,deps"  # Only these categories
@@ -285,16 +340,64 @@ Focus analysis on specific risk categories:
 
 Available categories: `security`, `ci`, `deps`, `db`, `infra`, `api`, `tests`, `churn`
 
+### Findings Display
+
+By default, the action shows a detailed findings section in both the step summary and PR comment. You can customize or disable this:
+
+```yaml
+# Show more findings (default is 10)
+- uses: better-vibe/branch-narrator-action@v1.2.0
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  with:
+    branch-narrator-version: "latest"
+    max-findings-display: "20"
+
+# Disable findings section entirely
+- uses: better-vibe/branch-narrator-action@v1.2.0
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  with:
+    branch-narrator-version: "latest"
+    show-findings: "false"
+```
+
+The findings section includes:
+- Total count and category breakdown (e.g., `🔒 security: 3 | 🗄️ db: 2`)
+- Individual findings with type, category, confidence level
+- File links pointing directly to the relevant code
+- Code excerpts
+
 ### Merge Gating
 
 Use `fail-on-score` to fail the workflow if the risk score exceeds a threshold:
 
 ```yaml
-- uses: better-vibe/branch-narrator-action@v1.1.0
+- uses: better-vibe/branch-narrator-action@v1.2.0
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   with:
     branch-narrator-version: "latest"
     fail-on-score: "70"  # Fail if risk >= 70
 ```
+
+## Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `GITHUB_TOKEN` | GitHub token for posting PR comments | Yes (for comments) |
+
+The `GITHUB_TOKEN` is automatically provided by GitHub Actions via `${{ secrets.GITHUB_TOKEN }}`. Pass it to the action using the `env` block:
+
+```yaml
+- uses: better-vibe/branch-narrator-action@v1.2.0
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  with:
+    branch-narrator-version: "latest"
+```
+
+If `GITHUB_TOKEN` is not provided and `comment: "true"`, the action will log a warning and skip posting the PR comment, but will still complete successfully.
 
 ## Permissions
 
@@ -336,7 +439,7 @@ Releases are automated via [changesets](https://github.com/changesets/changesets
 2. Merging that PR creates a GitHub Release and git tag
 3. The `v1` tag is automatically updated to point to the latest release
 
-**For consumers**: Use `@v1` to always get the latest compatible version, or pin to a specific version like `@v1.2.3`.
+**For consumers**: Use `@v1` to always get the latest compatible version, or pin to a specific version like `@v1.2.0`.
 
 ## License
 

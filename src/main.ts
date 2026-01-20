@@ -3,6 +3,7 @@
  */
 
 import * as core from "@actions/core";
+import * as github from "@actions/github";
 import { runBranchNarrator } from "./runner.js";
 import { renderStepSummary, renderPRComment } from "./render.js";
 import {
@@ -275,9 +276,11 @@ async function run(): Promise<void> {
     }
 
     // Build render context for enhanced output
+    // Use github.context.repo for owner/repo - available for all event types
+    const { owner, repo } = github.context.repo;
     const renderContext: RenderContext = {
-      owner: prContext?.owner ?? "",
-      repo: prContext?.repo ?? "",
+      owner,
+      repo,
       headSha,
       baseSha,
       resolvedVersion,

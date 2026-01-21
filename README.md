@@ -2,8 +2,8 @@
 
 A GitHub Action that runs [branch-narrator](https://github.com/better-vibe/branch-narrator) on pull requests to produce:
 
-- Deterministic PR **risk report** and **findings** summary
-- Machine-readable artifacts (`facts.json`, `risk-report.json`) suitable for AI agents and downstream workflows
+- **Human-readable PR comments** and step summaries (powered by `pr-body` CLI command)
+- **Machine-readable artifacts** (`facts.json`, `risk-report.json`) for AI agents, CI pipelines, and downstream workflows
 - Optional merge gating (fail the workflow on high risk)
 - **SARIF output** for GitHub Code Scanning integration
 - **Delta mode** for tracking changes between runs
@@ -145,9 +145,6 @@ jobs:
 | `redact` | Redact obvious secret values in evidence excerpts | No | `true` |
 | `comment` | Whether to post a PR comment with results | No | `true` |
 | `fail-on-score` | Fail workflow if risk score >= threshold (0-100) | No | - |
-| `max-flags` | Maximum flags to display in summary/comment | No | `5` |
-| `show-findings` | Show detailed findings section in summary/comment | No | `true` |
-| `max-findings-display` | Maximum findings to display in summary/comment | No | `10` |
 | `artifact-name` | Base name for uploaded artifacts | No | `branch-narrator` |
 | `base-sha` | Base commit SHA for non-pull_request runs (requires `head-sha`) | No | - |
 | `head-sha` | Head commit SHA for non-pull_request runs (requires `base-sha`) | No | - |
@@ -199,6 +196,8 @@ jobs:
 | `flag-count` | Total number of risk flags detected |
 | `findings-count` | Total number of findings detected |
 | `has-blocking` | Whether any blocking actions were identified |
+| `facts` | Full facts JSON output (may be truncated if >1MB) |
+| `risk-report` | Full risk report JSON output (may be truncated if >1MB) |
 | `facts-artifact-name` | Name of the uploaded facts artifact |
 | `risk-artifact-name` | Name of the uploaded risk report artifact |
 | `sarif-artifact-name` | Name of the uploaded SARIF artifact (if `sarif-upload` enabled) |
@@ -208,64 +207,51 @@ jobs:
 
 ## Features
 
-### Step Summary
+### Human-Readable Output (Step Summary & PR Comment)
 
-The action writes a detailed summary to the GitHub Actions Job Summary including:
-- **Version and commit range** with clickable compare link
-- Risk score and level with visual badge
-- **Delta comparison** (new/resolved findings when using baseline mode)
-- Change statistics (files, insertions, deletions, flags, findings)
-- Key findings highlights
-- Top N risk flags with scores and evidence
-- **Detailed findings section** with category breakdown and file permalinks
-- Category scores with visual bars
-- Blocking actions (if any)
-- Artifact references
+The Step Summary and PR Comment use the branch-narrator CLI's `pr-body` command, which generates human-friendly markdown optimized for PR reviewers:
+- Risk score and level with visual indicators
+- Change statistics and key findings
+- Risk flags with evidence excerpts
+- Actionable recommendations
 
-### PR Comment
+The action adds metadata headers with version info and a clickable commit range link. PR comments use a stable marker (`<!-- branch-narrator:report -->`) to update existing comments instead of creating new ones.
 
-If permissions allow and PR is not from a fork, the action creates/updates a PR comment containing:
-- **Version info** (`branch-narrator@x.y.z`) and commit range link
-- Risk score and level badge
-- **Delta summary** (when using baseline comparison)
-- Quick stats (files changed, insertions/deletions)
-- Collapsible key findings
-- Risk flags with evidence and **GitHub file permalinks**
-- **Detailed findings section** (collapsible) with category breakdown
-- Blocking actions warning
-- Artifact references
+### Machine-Readable Outputs
 
-The comment uses a stable hidden marker (`<!-- branch-narrator:report -->`) to update existing comments instead of creating new ones.
+For CI pipelines, coding agents, and downstream workflows, the action provides:
 
-### Pipeline Logs
+**Step Outputs** (available via `${{ steps.<id>.outputs.<name> }}`):
+- `facts` - Full facts JSON
+- `risk-report` - Full risk report JSON
+- Scalar values: `risk-score`, `risk-level`, `flag-count`, `findings-count`, `has-blocking`
 
-The action outputs a structured summary to the workflow logs:
-```
-┌─────────────────────────────────────────┐
-│          Analysis Summary               │
-├─────────────────────────────────────────┤
-│ Version:     1.2.3                      │
-│ Risk Score:  45  /100 (moderate)        │
-│ Flags:       3                          │
-│ Findings:    12                         │
-│ Files:       8                          │
-│ Delta:       +2 new, -1 resolved        │
-└─────────────────────────────────────────┘
-
-Findings by category:
-  security: 5
-  db: 4
-  deps: 3
-```
-
-The resolved version is also displayed as a GitHub Actions notice for easy visibility.
-
-### Artifacts
-
-The action uploads JSON artifacts:
+**Artifacts** (uploaded to workflow run):
 - `facts.json` - Structured facts about the changes
 - `risk-report.json` - Risk analysis with flags and scores
 - `branch-narrator.sarif` - SARIF output (if `sarif-upload` enabled)
+
+Example using JSON outputs in downstream steps:
+
+```yaml
+- uses: better-vibe/branch-narrator-action@v1.2.0
+  id: narrator
+  with:
+    branch-narrator-version: 'latest'
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+- name: Process findings
+  run: |
+    echo '${{ steps.narrator.outputs.facts }}' | jq '.findings[] | .category'
+
+- name: Check security flags
+  run: |
+    SECURITY_FLAGS=$(echo '${{ steps.narrator.outputs.risk-report }}' | jq '[.flags[] | select(.category == "security")] | length')
+    echo "Security flags: $SECURITY_FLAGS"
+```
+
+> **Note:** JSON outputs are truncated if they exceed GitHub's 1MB limit. Use artifacts for complete data.
 
 ### SARIF / GitHub Code Scanning
 
@@ -339,34 +325,6 @@ Focus analysis on specific risk categories:
 ```
 
 Available categories: `security`, `ci`, `deps`, `db`, `infra`, `api`, `tests`, `churn`
-
-### Findings Display
-
-By default, the action shows a detailed findings section in both the step summary and PR comment. You can customize or disable this:
-
-```yaml
-# Show more findings (default is 10)
-- uses: better-vibe/branch-narrator-action@v1.2.0
-  env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  with:
-    branch-narrator-version: "latest"
-    max-findings-display: "20"
-
-# Disable findings section entirely
-- uses: better-vibe/branch-narrator-action@v1.2.0
-  env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  with:
-    branch-narrator-version: "latest"
-    show-findings: "false"
-```
-
-The findings section includes:
-- Total count and category breakdown (e.g., `🔒 security: 3 | 🗄️ db: 2`)
-- Individual findings with type, category, confidence level
-- File links pointing directly to the relevant code
-- Code excerpts
 
 ### Merge Gating
 

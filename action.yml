@@ -25,18 +25,6 @@ inputs:
   fail-on-score:
     description: 'Fail the workflow if risk score >= this threshold (0-100)'
     required: false
-  max-flags:
-    description: 'Maximum number of flags to display in summary/comment'
-    required: false
-    default: '5'
-  show-findings:
-    description: 'Show detailed findings section in summary/comment'
-    required: false
-    default: 'true'
-  max-findings-display:
-    description: 'Maximum number of findings to display in summary/comment'
-    required: false
-    default: '10'
   artifact-name:
     description: 'Base name for uploaded artifacts'
     required: false
@@ -110,6 +98,10 @@ outputs:
     description: 'Total number of findings detected'
   has-blocking:
     description: 'Whether any blocking actions were identified (true|false)'
+  facts:
+    description: 'Full facts JSON output (may be truncated if >1MB)'
+  risk-report:
+    description: 'Full risk report JSON output (may be truncated if >1MB)'
   facts-artifact-name:
     description: 'Name of the uploaded facts artifact'
   risk-artifact-name:

@@ -300,7 +300,62 @@ async function runFactsSarif(options: RunnerOptions): Promise<string> {
 }
 
 /**
- * Run both branch-narrator commands and return results.
+ * Run branch-narrator pr-body command for human-readable markdown output.
+ */
+async function runPrBody(options: RunnerOptions): Promise<string> {
+  const {
+    version,
+    baseSha,
+    headSha,
+    profile,
+    redact,
+    exclude,
+    include,
+    maxFileBytes,
+    maxDiffBytes,
+    maxFindings,
+  } = options;
+
+  const args = [
+    `npx -y @better-vibe/branch-narrator@${version}`,
+    "pr-body",
+    "--mode branch",
+    `--base ${baseSha}`,
+    `--head ${headSha}`,
+    `--profile ${profile}`,
+  ];
+
+  if (redact) {
+    args.push("--redact");
+  }
+
+  // File filtering
+  for (const pattern of exclude) {
+    args.push(`--exclude "${pattern}"`);
+  }
+  for (const pattern of include) {
+    args.push(`--include "${pattern}"`);
+  }
+
+  // Size limits
+  if (maxFileBytes !== undefined) {
+    args.push(`--max-file-bytes ${maxFileBytes}`);
+  }
+  if (maxDiffBytes !== undefined) {
+    args.push(`--max-diff-bytes ${maxDiffBytes}`);
+  }
+  if (maxFindings !== undefined) {
+    args.push(`--max-findings ${maxFindings}`);
+  }
+
+  const command = args.join(" ");
+  core.info("Running: branch-narrator pr-body");
+
+  return await runCommand(command);
+}
+
+/**
+ * Run all branch-narrator commands and return results.
  */
 export async function runBranchNarrator(options: RunnerOptions): Promise<RunResult> {
   core.startGroup("Running branch-narrator analysis");
@@ -317,9 +372,12 @@ export async function runBranchNarrator(options: RunnerOptions): Promise<RunResu
     }
 
     // Build list of commands to run in parallel
+    // facts, risk-report, and pr-body always run
+    // SARIF is optional
     const promises: Promise<unknown>[] = [
       runFacts(options),
       runRiskReport(options),
+      runPrBody(options),
     ];
 
     // Optionally run SARIF generation
@@ -331,12 +389,13 @@ export async function runBranchNarrator(options: RunnerOptions): Promise<RunResu
 
     const facts = results[0] as Awaited<ReturnType<typeof runFacts>>;
     const riskReport = results[1] as Awaited<ReturnType<typeof runRiskReport>>;
-    const sarifPath = options.sarifUpload ? (results[2] as string) : undefined;
+    const prBodyMarkdown = results[2] as string;
+    const sarifPath = options.sarifUpload ? (results[3] as string) : undefined;
 
     core.info(`Analysis complete: risk score ${riskReport.riskScore}, ${riskReport.flags.length} flags`);
     core.endGroup();
 
-    return { facts, riskReport, sarifPath, resolvedVersion };
+    return { facts, riskReport, prBodyMarkdown, sarifPath, resolvedVersion };
   } catch (error) {
     core.endGroup();
     throw error;

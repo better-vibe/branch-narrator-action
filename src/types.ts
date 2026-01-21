@@ -229,7 +229,6 @@ export interface ActionInputs {
   redact: boolean;
   comment: boolean;
   failOnScore?: number;
-  maxFlags: number;
   artifactName: string;
   baseSha?: string;
   headSha?: string;
@@ -253,9 +252,6 @@ export interface ActionInputs {
   explainScore: boolean;
   // Evidence control
   maxEvidenceLines: number;
-  // Findings display
-  showFindings: boolean;
-  maxFindingsDisplay: number;
 }
 
 export interface ActionOutputs {
@@ -264,6 +260,10 @@ export interface ActionOutputs {
   flagCount: number;
   findingsCount: number;
   hasBlocking: boolean;
+  facts: string;
+  riskReport: string;
+  factsTruncated: boolean;
+  riskReportTruncated: boolean;
   factsArtifactName: string;
   riskArtifactName: string;
   sarifArtifactName?: string;
@@ -317,6 +317,8 @@ export interface RiskReportWithDelta extends RiskReport {
 export interface RunResult {
   facts: FactsOutputWithDelta;
   riskReport: RiskReportWithDelta;
+  /** Human-readable markdown from pr-body command */
+  prBodyMarkdown: string;
   sarifPath?: string;
   resolvedVersion: string;
 }
@@ -335,12 +337,4 @@ export interface RenderContext {
   resolvedVersion: string;
   /** Base commit SHA */
   baseSha: string;
-  /** Number of new findings (delta mode) */
-  deltaNewFindings?: number;
-  /** Number of resolved findings (delta mode) */
-  deltaResolvedFindings?: number;
-  /** Whether to show detailed findings section */
-  showFindings: boolean;
-  /** Maximum findings to display */
-  maxFindingsDisplay: number;
 }

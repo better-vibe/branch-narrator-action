@@ -31,6 +31,42 @@ function parseStringList(input: string): string[] {
 }
 
 /**
+ * GitHub Actions output size limit (1MB).
+ */
+const OUTPUT_SIZE_LIMIT = 1024 * 1024; // 1MB
+
+/**
+ * Truncate JSON output if it exceeds the GitHub Actions limit.
+ * Returns the JSON string and a flag indicating if truncation occurred.
+ */
+function truncateJsonOutput(obj: unknown, name: string): { json: string; truncated: boolean } {
+  const json = JSON.stringify(obj);
+  const byteLength = Buffer.byteLength(json, "utf8");
+
+  if (byteLength <= OUTPUT_SIZE_LIMIT) {
+    return { json, truncated: false };
+  }
+
+  // Calculate how much we're over the limit
+  const overBy = byteLength - OUTPUT_SIZE_LIMIT;
+  const percentage = Math.round((overBy / byteLength) * 100);
+
+  core.warning(
+    `${name} output exceeds 1MB limit (${Math.round(byteLength / 1024)}KB). ` +
+    `Truncated by ${percentage}%. Use the artifact for full data.`
+  );
+
+  // Create a truncated version with metadata
+  const truncatedOutput = {
+    _truncated: true,
+    _originalSize: byteLength,
+    _message: `Output exceeded 1MB limit. Download the ${name.toLowerCase().replace(" ", "-")}-artifact for complete data.`,
+  };
+
+  return { json: JSON.stringify(truncatedOutput), truncated: true };
+}
+
+/**
  * Parse action inputs from the workflow.
  */
 function getInputs(): ActionInputs {
@@ -41,7 +77,6 @@ function getInputs(): ActionInputs {
   const redact = core.getBooleanInput("redact");
   const comment = core.getBooleanInput("comment");
   const failOnScoreInput = core.getInput("fail-on-score");
-  const maxFlags = parseInt(core.getInput("max-flags") || "5", 10);
   const artifactName = core.getInput("artifact-name") || "branch-narrator";
   const baseSha = core.getInput("base-sha");
   const headSha = core.getInput("head-sha");
@@ -97,10 +132,6 @@ function getInputs(): ActionInputs {
   // Evidence control
   const maxEvidenceLines = parseInt(core.getInput("max-evidence-lines") || "5", 10);
 
-  // Findings display
-  const showFindings = core.getBooleanInput("show-findings");
-  const maxFindingsDisplay = parseInt(core.getInput("max-findings-display") || "10", 10);
-
   let failOnScore: number | undefined;
   if (failOnScoreInput) {
     failOnScore = parseInt(failOnScoreInput, 10);
@@ -117,7 +148,6 @@ function getInputs(): ActionInputs {
     redact,
     comment,
     failOnScore,
-    maxFlags,
     artifactName,
     baseSha,
     headSha,
@@ -134,8 +164,6 @@ function getInputs(): ActionInputs {
     maxFindings,
     explainScore,
     maxEvidenceLines,
-    showFindings,
-    maxFindingsDisplay,
   };
 }
 
@@ -148,8 +176,18 @@ function setOutputs(outputs: ActionOutputs): void {
   core.setOutput("flag-count", outputs.flagCount.toString());
   core.setOutput("findings-count", outputs.findingsCount.toString());
   core.setOutput("has-blocking", outputs.hasBlocking.toString());
+  core.setOutput("facts", outputs.facts);
+  core.setOutput("risk-report", outputs.riskReport);
   core.setOutput("facts-artifact-name", outputs.factsArtifactName);
   core.setOutput("risk-artifact-name", outputs.riskArtifactName);
+
+  // Log truncation status if applicable
+  if (outputs.factsTruncated) {
+    core.info("Note: facts output was truncated due to size limits. Use artifact for full data.");
+  }
+  if (outputs.riskReportTruncated) {
+    core.info("Note: risk-report output was truncated due to size limits. Use artifact for full data.");
+  }
 
   // Optional outputs
   if (outputs.sarifArtifactName) {
@@ -223,7 +261,7 @@ async function run(): Promise<void> {
     }
 
     // Run branch-narrator
-    const { facts, riskReport, sarifPath, resolvedVersion } = await runBranchNarrator({
+    const { facts, riskReport, prBodyMarkdown, sarifPath, resolvedVersion } = await runBranchNarrator({
       version: inputs.branchNarratorVersion,
       baseSha,
       headSha,
@@ -284,20 +322,10 @@ async function run(): Promise<void> {
       headSha,
       baseSha,
       resolvedVersion,
-      deltaNewFindings,
-      deltaResolvedFindings,
-      showFindings: inputs.showFindings,
-      maxFindingsDisplay: inputs.maxFindingsDisplay,
     };
 
     // Render and write Step Summary
-    const summaryMarkdown = renderStepSummary({
-      facts,
-      riskReport,
-      maxFlags: inputs.maxFlags,
-      artifactName: inputs.artifactName,
-      context: renderContext,
-    });
+    const summaryMarkdown = renderStepSummary(prBodyMarkdown, renderContext);
     await writeStepSummary(summaryMarkdown);
 
     // Post PR comment if enabled and not a fork
@@ -306,13 +334,7 @@ async function run(): Promise<void> {
       if (!token) {
         core.warning("GITHUB_TOKEN not available, skipping PR comment");
       } else {
-        const commentBody = renderPRComment({
-          facts,
-          riskReport,
-          maxFlags: inputs.maxFlags,
-          artifactName: inputs.artifactName,
-          context: renderContext,
-        });
+        const commentBody = renderPRComment(prBodyMarkdown, renderContext);
 
         await createOrUpdateComment({
           token,
@@ -332,6 +354,10 @@ async function run(): Promise<void> {
       scoreBreakdown = JSON.stringify(riskReport.scoreBreakdown);
     }
 
+    // Prepare JSON outputs with truncation handling
+    const factsOutput = truncateJsonOutput(facts, "Facts");
+    const riskReportOutput = truncateJsonOutput(riskReport, "Risk Report");
+
     // Set outputs
     const outputs: ActionOutputs = {
       riskScore: riskReport.riskScore,
@@ -339,6 +365,10 @@ async function run(): Promise<void> {
       flagCount: riskReport.flags.length,
       findingsCount: facts.findings.length,
       hasBlocking,
+      facts: factsOutput.json,
+      riskReport: riskReportOutput.json,
+      factsTruncated: factsOutput.truncated,
+      riskReportTruncated: riskReportOutput.truncated,
       factsArtifactName,
       riskArtifactName,
       sarifArtifactName,
@@ -364,8 +394,8 @@ async function run(): Promise<void> {
     }
     core.info("└─────────────────────────────────────────┘");
 
-    // Log findings by category if show-findings is enabled
-    if (inputs.showFindings && facts.findings.length > 0) {
+    // Log findings by category
+    if (facts.findings.length > 0) {
       const findingsByCategory = new Map<string, number>();
       for (const finding of facts.findings) {
         const cat = finding.category || "other";

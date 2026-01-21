@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: oven-sh/setup-bun@v1
         with:
@@ -23,6 +25,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Create Release PR or Publish
+        id: changesets
         uses: changesets/action@v1
         with:
           publish: bun run release:tag
@@ -31,3 +34,29 @@ jobs:
           commit: "chore: release"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update major version tag
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          # Get the latest tag that was just created
+          TAG=$(git describe --tags --abbrev=0)
+
+          # Extract major version (e.g., v1 from v1.2.3)
+          MAJOR=$(echo "$TAG" | grep -oE '^v[0-9]+')
+
+          if [ -z "$MAJOR" ]; then
+            echo "Could not extract major version from tag: $TAG"
+            exit 1
+          fi
+
+          echo "Moving $MAJOR tag to point to $TAG"
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Force update the major version tag
+          git tag -f "$MAJOR" "$TAG"
+          git push -f origin "$MAJOR"
+
+          echo "Successfully updated $MAJOR to point to $TAG"

@@ -11,7 +11,7 @@ Releases are automated using [changesets](https://github.com/changesets/changese
    - Updates `package.json` version and `CHANGELOG.md`
    - Creates a git tag (`v1.x.x`)
    - Creates a GitHub Release
-5. **Move Major Tag workflow** automatically updates the `v1` tag to point to the latest release
+   - Automatically updates the `v1` tag to point to the latest release
 
 ## Adding a Changeset
 
@@ -65,10 +65,7 @@ Changesets action creates Version PR
   Review & merge Version PR
         │
         ▼
-   Tag + GitHub Release created
-        │
-        ▼
-   v1 tag automatically updated
+Tag + GitHub Release + v1 tag updated
 ```
 
 ## Manual Release (if needed)

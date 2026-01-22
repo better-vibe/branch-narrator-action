@@ -308,7 +308,6 @@ async function runPrBody(options: RunnerOptions): Promise<string> {
     baseSha,
     headSha,
     profile,
-    redact,
     exclude,
     include,
     maxFileBytes,
@@ -324,10 +323,6 @@ async function runPrBody(options: RunnerOptions): Promise<string> {
     `--head ${headSha}`,
     `--profile ${profile}`,
   ];
-
-  if (redact) {
-    args.push("--redact");
-  }
 
   // File filtering
   for (const pattern of exclude) {

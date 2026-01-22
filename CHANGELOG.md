@@ -1,5 +1,11 @@
 # branch-narrator-action
 
+## 1.3.1
+
+### Patch Changes
+
+- 9fb9307: remove non-existent redact flag from pr-body command
+
 ## 1.3.0
 
 ### Minor Changes

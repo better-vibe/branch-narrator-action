@@ -3,6 +3,7 @@
 /**
  * Release script for GitHub Actions (not published to npm).
  * Creates a git tag and GitHub Release based on package.json version.
+ * Also updates the major version tag (e.g., v1) to point to the latest release.
  *
  * Called by changesets/action after version bumps are merged.
  */
@@ -45,6 +46,9 @@ try {
   console.log("Tag was pushed successfully. Create the release manually if needed.");
 }
 
+// Update major version tag (e.g., v1 -> v1.2.3)
+updateMajorVersionTag(tag);
+
 /**
  * Extract changelog entry for a specific version from CHANGELOG.md
  */
@@ -62,5 +66,35 @@ function getChangelogEntry(version) {
     return changelog.slice(contentStart, end).trim();
   } catch {
     return null;
+  }
+}
+
+/**
+ * Update major version tag to point to the latest release.
+ * For example, v1 will point to v1.3.1 after releasing v1.3.1.
+ * This allows users to use @v1 to always get the latest v1.x.x release.
+ */
+function updateMajorVersionTag(tag) {
+  // Extract major version (e.g., v1 from v1.2.3)
+  const match = tag.match(/^(v\d+)/);
+  if (!match) {
+    console.log(`Could not extract major version from tag: ${tag}`);
+    return;
+  }
+
+  const majorTag = match[1];
+  console.log(`Updating ${majorTag} tag to point to ${tag}...`);
+
+  try {
+    // Force update the major version tag locally
+    execSync(`git tag -f ${majorTag} ${tag}`, { stdio: "inherit" });
+
+    // Force push the major version tag
+    execSync(`git push -f origin ${majorTag}`, { stdio: "inherit" });
+
+    console.log(`Successfully updated ${majorTag} to point to ${tag}`);
+  } catch (error) {
+    console.error(`Failed to update major version tag: ${error.message}`);
+    console.log("The release was created successfully. Update the major tag manually if needed.");
   }
 }
